@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
 from app.db.mongodb import mongodb
+from app.api.v1.auth_routes import router as auth_router
 
 
 @asynccontextmanager
@@ -33,6 +34,8 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health_check():
         return {"status": "ok", "environment": settings.environment}
+    
+    app.include_router(auth_router)
 
     return app
 

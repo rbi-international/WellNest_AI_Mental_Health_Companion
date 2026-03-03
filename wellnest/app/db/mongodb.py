@@ -34,9 +34,8 @@ class MongoDB:
 
     @property
     def db(self):
-        if not self._database:
+        if self._database is None:
             raise RuntimeError("Database not initialized")
         return self._database
-
 
 mongodb = MongoDB()
