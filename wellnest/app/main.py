@@ -1,23 +1,38 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
+
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
+from app.db.mongodb import mongodb
 
 
-def create_app() -> FastAPI:
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     settings = get_settings()
     configure_logging()
     logger = get_logger("api")
 
-    app = FastAPI(title=settings.app_name)
+    logger.info("application_startup")
+
+    await mongodb.connect()
+
+    yield
+
+    await mongodb.close()
+    logger.info("application_shutdown")
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+
+    app = FastAPI(
+        title=settings.app_name,
+        lifespan=lifespan
+    )
 
     @app.get("/health")
     async def health_check():
-        return {
-            "status": "ok",
-            "environment": settings.environment
-        }
-
-    logger.info("application_started", environment=settings.environment)
+        return {"status": "ok", "environment": settings.environment}
 
     return app
 
