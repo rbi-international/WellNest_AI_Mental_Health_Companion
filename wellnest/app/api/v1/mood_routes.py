@@ -6,6 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.api.dependencies import get_current_user
 from app.models.mood import MoodLogCreate, MoodLogResponse, MoodTrendPoint, MoodTrendsResponse
 from app.repositories.mood_repo import MoodRepository
+from app.services.mood_analytics import MoodAnalytics
+from app.models.mood_analytics import MoodAnalyticsResponse
+from app.db.mongodb import mongodb
 
 router = APIRouter(prefix="/mood", tags=["mood"])
 repo = MoodRepository()
@@ -68,3 +71,38 @@ async def mood_trends(
 
     avg = round(sum(p.mood_score for p in points) / len(points), 2)
     return MoodTrendsResponse(points=points, avg_7d=avg)
+
+@router.get("/analytics", response_model=MoodAnalyticsResponse)
+async def mood_analytics(
+    days: int = 14,
+    user=Depends(get_current_user)
+):
+
+    moods_cursor = mongodb.db.moods.find(
+        {"user_id": user["_id"]}
+    ).sort("date", -1).limit(days)
+
+    moods = [doc["mood_score"] async for doc in moods_cursor]
+
+    moods.reverse()
+
+    avg = MoodAnalytics.compute_average(moods)
+
+    trend = MoodAnalytics.compute_trend(moods)
+
+    volatility = MoodAnalytics.compute_volatility(moods)
+
+    interpretation = "stable"
+
+    if trend < -0.2:
+        interpretation = "declining mood trend"
+
+    if volatility > 5:
+        interpretation = "high emotional volatility"
+
+    return MoodAnalyticsResponse(
+        average_mood=avg,
+        trend_slope=trend,
+        volatility_index=volatility,
+        interpretation=interpretation
+    )
