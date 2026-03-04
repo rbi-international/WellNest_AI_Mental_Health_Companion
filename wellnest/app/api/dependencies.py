@@ -1,42 +1,47 @@
-from __future__ import annotations
-
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import jwt
+from bson import ObjectId
 
-from app.core.security import decode_access_token
-from app.repositories.user_repo import UserRepository
+from app.core.config import get_settings
+from app.db.mongodb import mongodb
+from app.core.logger import get_logger
 
+settings = get_settings()
 security = HTTPBearer()
-user_repo = UserRepository()
+
+logger = get_logger("auth_dependency")
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
     token = credentials.credentials
 
     try:
-        payload = decode_access_token(token)
+        payload = jwt.decode(
+            token,
+            settings.jwt_secret,
+            algorithms=[settings.jwt_algorithm],
+        )
+
         user_id = payload.get("sub")
 
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
+        logger.info("jwt_payload_decoded", user_id=user_id)
 
-        user = await user_repo.get_by_id(user_id)
+        if not user_id:
+            raise HTTPException(status_code=401)
+
+        user = await mongodb.db.users.find_one(
+            {"_id": ObjectId(user_id)}
+        )
+
         if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+            logger.warning("jwt_user_not_found", user_id=user_id)
+            raise HTTPException(status_code=401)
 
         return user
 
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-
-
-def require_role(required_role: str):
-    async def role_checker(current_user=Depends(get_current_user)):
-        role = current_user.get("role", "user")
-        if role != required_role:
-            raise HTTPException(status_code=403, detail="Forbidden")
-        return current_user
-
-    return role_checker
+    except Exception as e:
+        logger.error("jwt_verification_failed", error=str(e))
+        raise HTTPException(status_code=401)

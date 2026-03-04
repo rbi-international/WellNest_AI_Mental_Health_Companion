@@ -15,7 +15,11 @@ class MongoDB:
     async def connect(self) -> None:
         settings = get_settings()
 
-        logger.info("attempting_mongodb_connection", uri=settings.mongo_uri, db=settings.mongo_db)
+        logger.info(
+            "attempting_mongodb_connection",
+            uri=settings.mongo_uri,
+            db=settings.mongo_db
+        )
 
         try:
             self._client = AsyncIOMotorClient(settings.mongo_uri)
@@ -29,16 +33,23 @@ class MongoDB:
             # DB-level uniqueness: users.email
             await self._database.users.create_index("email", unique=True)
 
-            logger.info("mongodb_connection_successful", db_name=self._database.name)
+            logger.info(
+                "mongodb_connection_successful",
+                db_name=self._database.name
+            )
 
         except Exception as e:
-            logger.error("mongodb_connection_failed", error=str(e))
+            logger.error(
+                "mongodb_connection_failed",
+                error=str(e)
+            )
 
             if self._client:
                 self._client.close()
 
             self._client = None
             self._database = None
+
             raise RuntimeError("MongoDB connection failed") from e
 
     async def close(self) -> None:

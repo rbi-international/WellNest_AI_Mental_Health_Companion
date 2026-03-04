@@ -1,35 +1,44 @@
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
 from jose import jwt
 from passlib.context import CryptContext
-from app.core.config import get_settings
 
-pwd_context = CryptContext(
-    schemes=["bcrypt_sha256", "bcrypt"],  # accept both (migration-friendly)
-    deprecated="auto",
-)
+from app.core.config import get_settings
+from app.core.logger import get_logger
+
+settings = get_settings()
+logger = get_logger("security")
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(password, hashed_password)
+def verify_password(password: str, hashed: str) -> bool:
+    return pwd_context.verify(password, hashed)
 
 
-def create_access_token(data: dict, expires_minutes: int | None = None) -> str:
-    settings = get_settings()
-    to_encode = data.copy()
+def create_access_token(data: dict) -> str:
+    try:
+        payload = data.copy()
 
-    exp_minutes = expires_minutes if expires_minutes is not None else settings.access_token_exp_minutes
-    expire = datetime.now(timezone.utc) + timedelta(minutes=exp_minutes)
-    to_encode.update({"exp": expire})
+        expire = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.access_token_exp_minutes
+        )
 
-    return jwt.encode(to_encode, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+        payload.update({"exp": expire})
 
+        token = jwt.encode(
+            payload,
+            settings.jwt_secret,
+            algorithm=settings.jwt_algorithm,
+        )
 
-def decode_access_token(token: str) -> dict:
-    settings = get_settings()
-    return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        logger.info("jwt_token_created", user_id=data.get("sub"))
+
+        return token
+
+    except Exception as e:
+        logger.error("jwt_generation_failed", error=str(e))
+        raise
