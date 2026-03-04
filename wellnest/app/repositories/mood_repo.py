@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone, date
-from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
 
 from app.db.mongodb import mongodb
@@ -53,12 +52,28 @@ class MoodRepository:
         return await cursor.to_list(length=limit)
 
     async def list_recent_points(self, user_id: str, days: int = 7):
-        cursor = (
-            mongodb.db.mood_logs.find({"user_id": user_id})
-            .sort("date", -1)
-            .limit(days)
-        )
+        cursor = mongodb.db.mood_logs.find({"user_id": user_id}).sort("date", -1).limit(days)
         return await cursor.to_list(length=days)
+
+    async def get_moods(self, user_id: str, start: date, end: date, limit: int = 500):
+        """
+        Returns mood logs between start and end date (inclusive), sorted oldest -> newest.
+        This is required by the MoodAnalyticsService.
+        """
+        cursor = (
+            mongodb.db.mood_logs.find(
+                {
+                    "user_id": user_id,
+                    "date": {
+                        "$gte": start.isoformat(),
+                        "$lte": end.isoformat(),
+                    },
+                }
+            )
+            .sort("date", ASCENDING)
+            .limit(limit)
+        )
+        return await cursor.to_list(length=limit)
 
     async def delete_mood(self, user_id: str, day: date) -> int:
         res = await mongodb.db.mood_logs.delete_one({"user_id": user_id, "date": day.isoformat()})
